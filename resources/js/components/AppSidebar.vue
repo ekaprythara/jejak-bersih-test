@@ -100,6 +100,30 @@ const mainNavItems = computed<NavItem[]>(() => {
         },
     ];
 });
+
+const reportNavItems = computed<NavItem[]>(() => {
+    const isOwner = page.props.auth.isOwner;
+    const isAdmin = page.props.auth.isAdmin;
+
+    return [
+        {
+            title: 'Transaksi',
+            href: transactions.index(),
+            icon: ReceiptText,
+        },
+
+        {
+            title: 'Pengeluaran',
+            href: expenses.index(),
+            icon: TrendingDown,
+        },
+        {
+            title: 'Laporan Keuangan',
+            href: dashboard(),
+            icon: LayoutGrid,
+        },
+    ];
+});
 </script>
 
 <template>
@@ -117,7 +141,8 @@ const mainNavItems = computed<NavItem[]>(() => {
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
+            <NavMain :items="mainNavItems" sidebar-group-label="Manajemen" />
+            <NavMain :items="reportNavItems" sidebar-group-label="Laporan" />
         </SidebarContent>
 
         <SidebarFooter>
