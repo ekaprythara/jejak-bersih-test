@@ -663,5 +663,3 @@ const date = new Date().toLocaleDateString('id-ID', {
         </div>
     </div>
 </template>
-
-<style src="vue-multiselect/dist/vue-multiselect.min.css" />

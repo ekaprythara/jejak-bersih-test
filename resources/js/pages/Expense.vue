@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { Head, Form, router, Link } from '@inertiajs/vue3';
-import { Eye, Edit, Trash2, MoveUpRight } from '@lucide/vue';
+import { Head, Form, router, useForm } from '@inertiajs/vue3';
+import {
+    Eye,
+    Edit,
+    Trash2,
+    MoveUpRight,
+    FileUp,
+    CalendarIcon,
+} from '@lucide/vue';
 import type { ColumnDef } from '@tanstack/vue-table';
 import dayjs from 'dayjs';
-import { h, ref } from 'vue';
+import pickBy from 'lodash/pickBy';
+import { computed, h, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
+
+import { Calendar } from '@/components/ui/calendar';
 import {
     Dialog,
     DialogContent,
@@ -18,10 +28,23 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { destroy, index, store, update } from '@/routes/expenses'; // Tambahkan route update di sini
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { destroy, index, store, update, print } from '@/routes/expenses'; // Tambahkan route update di sini
 import type {
     ExpenseCategoryType,
     ExpenseType,
+    OutletType,
     PaginatedResponse,
 } from '@/types/data-types';
 
@@ -77,7 +100,9 @@ const isDeleting = ref(false);
 
 // Eksekusi request DELETE ke backend
 function confirmDelete() {
-    if (!selectedExpense.value) return;
+    if (!selectedExpense.value) {
+        return;
+    }
 
     isDeleting.value = true;
 
@@ -101,6 +126,7 @@ function handleImagePreview(event: Event, isEdit = false) {
 
     if (target.files && target.files[0]) {
         const url = URL.createObjectURL(target.files[0]);
+
         if (isEdit) {
             editPreviewImage.value = url;
         } else {
@@ -122,15 +148,72 @@ function handleEditSuccess() {
     selectedExpense.value = null;
 }
 
-function handleDeleteSuccess() {
-    toast.success('Data Pengeluaran Berhasil Dihapus!');
-    isEditModalOpen.value = false;
-}
+const { expenses, expenseCategories, outlets, categories, filters } =
+    defineProps<{
+        expenses: PaginatedResponse<ExpenseType>;
+        expenseCategories: ExpenseCategoryType[];
+        outlets: OutletType[];
+        filters: ExpenseType;
+        categories: ExpenseCategoryType[];
+    }>();
 
-const { expenses, expenseCategories } = defineProps<{
-    expenses: PaginatedResponse<ExpenseType>;
-    expenseCategories: ExpenseCategoryType[];
-}>();
+// 2. Set default value dengan MENCARI object yang sesuai dengan parameter URL
+// 1. Set default value dari props filters (jika tidak ada / null, fallback ke 'all')
+const selectedOutlet = ref<string>(
+    filters.outlet_id ? String(filters.outlet_id) : 'all',
+);
+
+const selectedCategory = ref<string>(
+    filters.category_id ? String(filters.category_id) : 'all',
+);
+
+// 2. Watch perubahan nilai selectedOutlet dan selectedCategory
+watch([selectedOutlet, selectedCategory], ([newOutlet, newCategory]) => {
+    const params: Record<string, string | null> = {
+        outlet_id: newOutlet !== 'all' ? newOutlet : null,
+        category_id: newCategory !== 'all' ? newCategory : null,
+    };
+
+    // Filter hapus key yang nilainya null/undefined agar URL tetap bersih
+    const cleanParams = pickBy(
+        params,
+        (value) => value !== null && value !== undefined,
+    );
+
+    router.get(index().url, cleanParams, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+});
+
+const isExportDialogOpen = ref(false);
+
+// Ref penampung untuk Calendar Shadcn
+const startDatePicker = ref();
+const endDatePicker = ref();
+
+// Form Inertia standar (Bebas penamaan, kita beri nama `form`)
+const form = useForm({
+    start_date: '',
+    end_date: '',
+    outlet_id: 'all',
+    expense_category_id: 'all',
+});
+
+function submitExport() {
+    // Susun query parameters dari form
+    const params = new URLSearchParams({
+        start_date: form.start_date || '',
+        end_date: form.end_date || '',
+        outlet_id: form.outlet_id || 'all',
+        expense_category_id: form.expense_category_id || 'all',
+    }).toString();
+
+    // Buka PDF di tab baru browser (Native PDF Preview)
+    window.open(`${print().url}?${params}`, '_blank');
+    isExportDialogOpen.value = false;
+}
 
 const columns: ColumnDef<ExpenseType>[] = [
     {
@@ -199,9 +282,23 @@ const columns: ColumnDef<ExpenseType>[] = [
         },
     },
     {
-        accessorFn: (row) => row.user.name,
-        id: 'user_name',
+        accessorKey: 'user_id',
         header: 'Dibuat Oleh',
+        cell: ({ row }) => {
+            const role = row.original.user.role.name;
+            const name = row.original.user.name;
+
+            return h('div', { class: 'flex flex-col' }, [
+                h('span', { class: 'font-semibold text-gray-900' }, `${name}`),
+                h(
+                    'span',
+                    {
+                        class: 'text-xs font-medium text-gray-400 tracking-wider uppercase',
+                    },
+                    `${role}`,
+                ),
+            ]);
+        },
     },
     {
         id: 'actions',
@@ -261,17 +358,79 @@ const columns: ColumnDef<ExpenseType>[] = [
                 <!-- Header Title & Button -->
                 <div class="flex flex-row items-center justify-between">
                     <div>
-                        <h2 class="text-xl font-bold text-gray-800">
+                        <h2 class="text-[2.488rem] font-bold text-gray-800">
                             Daftar Pengeluaran
                         </h2>
-                        <p class="text-xs text-gray-500">
+                        <p class="text-[1rem] text-gray-500">
                             Kelola dan pantau pengeluaran operasional outlet
                             cuci sepatu.
                         </p>
                     </div>
-                    <Button @click="isModalOpen = true">
-                        Tambah Pengeluaran
-                    </Button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-[1.5fr_0.5fr]">
+                    <div class="flex gap-1">
+                        <!-- Filter Cabang / Outlet -->
+                        <div class="flex w-fit items-center gap-1">
+                            <Select v-model="selectedOutlet">
+                                <SelectTrigger
+                                    id="outlet_id"
+                                    class="w-48 rounded-lg border-slate-200"
+                                >
+                                    <SelectValue placeholder="Semua Cabang" />
+                                </SelectTrigger>
+                                <SelectContent class="rounded-xl">
+                                    <SelectItem value="all">
+                                        Semua Cabang
+                                    </SelectItem>
+                                    <SelectItem
+                                        v-for="outlet in outlets"
+                                        :key="outlet.id"
+                                        :value="String(outlet.id)"
+                                    >
+                                        {{ outlet.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <!-- Filter Kategori Pengeluaran -->
+                        <div class="flex w-fit items-center gap-1">
+                            <Select v-model="selectedCategory">
+                                <SelectTrigger
+                                    id="expense_category_id"
+                                    class="w-48 rounded-lg border-slate-200"
+                                >
+                                    <SelectValue placeholder="Semua Kategori" />
+                                </SelectTrigger>
+                                <SelectContent class="rounded-xl">
+                                    <SelectItem value="all">
+                                        Semua Kategori
+                                    </SelectItem>
+                                    <SelectItem
+                                        v-for="category in categories"
+                                        :key="category.id"
+                                        :value="String(category.id)"
+                                    >
+                                        {{ category.category_name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div class="ms-auto flex gap-1">
+                        <Button
+                            @click="isExportDialogOpen = true"
+                            class="bg-green-600 text-white"
+                        >
+                            Ekspor
+                            <span><FileUp /></span>
+                        </Button>
+                        <Button @click="isModalOpen = true">
+                            Tambah Pengeluaran
+                        </Button>
+                    </div>
                 </div>
 
                 <!-- DataTable Component -->
@@ -279,11 +438,218 @@ const columns: ColumnDef<ExpenseType>[] = [
                     :columns="columns"
                     :data="expenses.data"
                     searchable
-                    searchPlaceholder="Cari Pengeluaran..."
+                    searchPlaceholder="Cari di Pengeluaran..."
                 />
             </div>
         </div>
     </div>
+
+    <!-- Dialog / Modal Ekspor PDF -->
+    <Dialog v-model:open="isExportDialogOpen">
+        <DialogContent class="rounded-2xl sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle class="text-xl font-bold text-slate-800">
+                    Ekspor Data Pengeluaran
+                </DialogTitle>
+                <DialogDescription>
+                    Ekspor data pengeluaran untuk keperluan analisis.
+                </DialogDescription>
+            </DialogHeader>
+
+            <form @submit.prevent="submitExport" class="space-y-4 pt-2">
+                <!-- Grid 2 Kolom Tanggal -->
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- 1. Dari Tanggal -->
+                    <div class="space-y-1.5">
+                        <Label class="text-sm font-medium text-slate-700">
+                            Dari Tanggal
+                        </Label>
+
+                        <Popover>
+                            <PopoverTrigger as-child>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    class="w-full justify-start rounded-lg border-slate-200 text-left font-normal"
+                                    :class="
+                                        !form.start_date &&
+                                        'text-muted-foreground'
+                                    "
+                                >
+                                    <CalendarIcon class="mr-2 h-4 w-4" />
+                                    <span>
+                                        {{
+                                            form.start_date
+                                                ? dayjs(form.start_date).format(
+                                                      'YYYY-MM-DD',
+                                                  )
+                                                : 'yyyy-mm-dd'
+                                        }}
+                                    </span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                class="z-60 w-auto bg-white p-0 shadow-md"
+                                align="start"
+                            >
+                                <Calendar
+                                    v-model="startDatePicker"
+                                    initial-focus
+                                    @update:model-value="
+                                        (val) => {
+                                            if (val) {
+                                                form.start_date = `${val.year}-${String(val.month).padStart(2, '0')}-${String(val.day).padStart(2, '0')}`;
+                                            }
+                                        }
+                                    "
+                                />
+                            </PopoverContent>
+                        </Popover>
+
+                        <InputError :message="form.errors.start_date" />
+                    </div>
+
+                    <!-- 2. Sampai Tanggal -->
+                    <div class="space-y-1.5">
+                        <Label class="text-sm font-medium text-slate-700">
+                            Sampai Tanggal
+                        </Label>
+
+                        <Popover>
+                            <PopoverTrigger as-child>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    class="w-full justify-start rounded-lg border-slate-200 text-left font-normal"
+                                    :class="
+                                        !form.end_date &&
+                                        'text-muted-foreground'
+                                    "
+                                >
+                                    <CalendarIcon class="mr-2 h-4 w-4" />
+                                    <span>
+                                        {{
+                                            form.end_date
+                                                ? dayjs(form.end_date).format(
+                                                      'YYYY-MM-DD',
+                                                  )
+                                                : 'yyyy-mm-dd'
+                                        }}
+                                    </span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                class="z-60 w-auto bg-white p-0 shadow-md"
+                                align="start"
+                            >
+                                <Calendar
+                                    v-model="endDatePicker"
+                                    initial-focus
+                                    :min-value="startDatePicker"
+                                    @update:model-value="
+                                        (val) => {
+                                            if (val) {
+                                                form.end_date = `${val.year}-${String(val.month).padStart(2, '0')}-${String(val.day).padStart(2, '0')}`;
+                                            }
+                                        }
+                                    "
+                                />
+                            </PopoverContent>
+                        </Popover>
+
+                        <InputError :message="form.errors.end_date" />
+                    </div>
+                </div>
+
+                <!-- 3. Pilih Cabang -->
+                <div class="space-y-1.5">
+                    <Label
+                        for="outlet_id"
+                        class="text-sm font-medium text-slate-700"
+                    >
+                        Pilih Cabang
+                    </Label>
+
+                    <Select v-model="form.outlet_id">
+                        <SelectTrigger
+                            id="outlet_id"
+                            class="w-full rounded-lg border-slate-200"
+                        >
+                            <SelectValue placeholder="Semua Cabang" />
+                        </SelectTrigger>
+                        <SelectContent class="rounded-xl">
+                            <SelectItem value="all"> Semua Cabang </SelectItem>
+                            <SelectItem
+                                v-for="outlet in outlets"
+                                :key="outlet.id"
+                                :value="String(outlet.id)"
+                            >
+                                {{ outlet.name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <InputError :message="form.errors.outlet_id" />
+                </div>
+
+                <!-- 4. Pilih Kategori -->
+                <div class="space-y-1.5">
+                    <Label
+                        for="expense_category_id"
+                        class="text-sm font-medium text-slate-700"
+                    >
+                        Pilih Kategori
+                    </Label>
+
+                    <Select v-model="form.expense_category_id">
+                        <SelectTrigger
+                            id="expense_category_id"
+                            class="w-full rounded-lg border-slate-200"
+                        >
+                            <SelectValue placeholder="Semua Kategori" />
+                        </SelectTrigger>
+                        <SelectContent class="rounded-xl">
+                            <SelectItem value="all">
+                                Semua Kategori
+                            </SelectItem>
+                            <SelectItem
+                                v-for="category in categories"
+                                :key="category.id"
+                                :value="String(category.id)"
+                            >
+                                {{ category.category_name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <InputError :message="form.errors.expense_category_id" />
+                </div>
+
+                <!-- Action Buttons -->
+                <DialogFooter class="flex justify-end gap-2 pt-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="isExportDialogOpen = false"
+                        class="rounded-lg border-slate-300 px-5 py-2 text-slate-700 hover:bg-slate-50"
+                    >
+                        Batal
+                    </Button>
+                    <Button
+                        type="submit"
+                        :disabled="form.processing"
+                        class="rounded-lg bg-emerald-600 px-5 py-2 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        {{
+                            form.processing
+                                ? 'Mengekspor...'
+                                : 'Ekspor Sekarang'
+                        }}
+                    </Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>
 
     <!-- Dialog / Modal Tambah Pengeluaran -->
     <Dialog v-model:open="isModalOpen">
@@ -604,6 +970,7 @@ const columns: ColumnDef<ExpenseType>[] = [
     </Dialog>
 
     <!-- Dialog Edit Pengeluaran -->
+
     <Dialog v-model:open="isEditModalOpen">
         <DialogContent class="rounded-2xl sm:max-w-120">
             <DialogHeader>

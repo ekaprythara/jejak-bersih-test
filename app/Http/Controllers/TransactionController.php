@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Spatie\LaravelPdf\Facades\Pdf;
 
 class TransactionController extends Controller
 {
@@ -44,6 +45,29 @@ class TransactionController extends Controller
             'transactionStatus' => Status::where('type', 'transaction_progress')->get(),
             'shoeStatuses' => Status::where('type', 'shoes_progress')->get(),
         ]);
+    }
+
+    public function printPdf(Transaction $transaction)
+    {
+        $transaction->load([
+            'customer',
+            'outlet.user',
+            'transactionShoes.shoeServices.service',
+            'transactionShoes.status',
+        ]);
+
+        return Pdf::view('prints.invoice-pdf', [
+            'transaction' => $transaction,
+        ])
+            ->paperSize(80, 200, 'mm') // Tinggi disesuaikan ke 300mm agar tidak terlalu jauh ke bawah
+            ->withBrowsershot(function ($browsershot) {
+                $browsershot
+                    ->setNodeBinary('/Users/ekapriyanthara/Library/Application Support/Herd/config/nvm/versions/node/v22.23.1/bin/node')
+                    ->setNpmBinary('/Users/ekapriyanthara/Library/Application Support/Herd/config/nvm/versions/node/v22.23.1/bin/npm')
+                    // Margin atas/bawah 10mm, kiri/kanan diperkecil jadi 4mm agar pas di kertas 80mm
+                    ->margins(5, 0, 5, 0, 'mm');
+            })
+            ->inline("invoice-{$transaction->invoice_number}.pdf");
     }
 
     /**

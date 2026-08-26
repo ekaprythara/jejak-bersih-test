@@ -34,95 +34,99 @@ import type { NavItem } from '@/types';
 import { computed } from 'vue';
 
 const page = usePage();
+const isOwner = page.props.auth.isOwner;
+const isAdmin = page.props.auth.isAdmin;
 
 const mainNavItems = computed<NavItem[]>(() => {
-    const isOwner = page.props.auth.isOwner;
-    const isAdmin = page.props.auth.isAdmin;
-
-    return [
-        {
-            title: 'Dashboard',
-            href: dashboard(),
-            icon: LayoutGrid,
-        },
-        // Hanya tambahkan ke array jika `can.viewCashierPage` bernilai TRUE
-        ...(isAdmin
-            ? [
-                  {
-                      title: 'Kasir / POS',
-                      href: cashier.index(),
-                      icon: ShoppingCart,
-                  },
-              ]
-            : []),
-        {
-            title: 'Transaksi',
-            href: transactions.index(),
-            icon: ReceiptText,
-        },
-        ...(isOwner
-            ? [
-                  {
-                      title: 'Admin',
-                      href: users.index(),
-                      icon: ShieldUser,
-                  },
-              ]
-            : []),
-        ...(isOwner
-            ? [
-                  {
-                      title: 'Cabang',
-                      href: index(),
-                      icon: Store,
-                  },
-              ]
-            : []),
-
-        {
-            title: 'Pelanggan',
-            href: customers.index(),
-            icon: UsersRound,
-        },
-        ...(isOwner
-            ? [
-                  {
-                      title: 'Layanan',
-                      href: services.index(),
-                      icon: Sparkles,
-                  },
-              ]
-            : []),
-        {
-            title: 'Pengeluaran',
-            href: expenses.index(),
-            icon: TrendingDown,
-        },
-    ];
+    if (isOwner) {
+        return [
+            {
+                title: 'Dashboard',
+                href: dashboard(),
+                icon: LayoutGrid,
+            },
+            {
+                title: 'Admin',
+                href: users.index(),
+                icon: ShieldUser,
+            },
+            {
+                title: 'Cabang',
+                href: index(),
+                icon: Store,
+            },
+            {
+                title: 'Layanan',
+                href: services.index(),
+                icon: Sparkles,
+            },
+        ];
+    } else if (isAdmin) {
+        return [
+            {
+                title: 'Dashboard',
+                href: dashboard(),
+                icon: LayoutGrid,
+            },
+            {
+                title: 'Kasir / POS',
+                href: cashier.index(),
+                icon: ShoppingCart,
+            },
+            {
+                title: 'Transaksi',
+                href: transactions.index(),
+                icon: ShoppingCart,
+            },
+            {
+                title: 'Pelanggan',
+                href: customers.index(),
+                icon: UsersRound,
+            },
+            {
+                title: 'Pengeluaran',
+                href: expenses.index(),
+                icon: TrendingDown,
+            },
+        ];
+    } else {
+        return [];
+    }
 });
 
 const reportNavItems = computed<NavItem[]>(() => {
-    const isOwner = page.props.auth.isOwner;
-    const isAdmin = page.props.auth.isAdmin;
+    if (isOwner) {
+        return [
+            {
+                title: 'Transaksi',
+                href: transactions.index(),
+                icon: ReceiptText,
+            },
 
-    return [
-        {
-            title: 'Transaksi',
-            href: transactions.index(),
-            icon: ReceiptText,
-        },
-
-        {
-            title: 'Pengeluaran',
-            href: expenses.index(),
-            icon: TrendingDown,
-        },
-        {
-            title: 'Laporan Keuangan',
-            href: dashboard(),
-            icon: LayoutGrid,
-        },
-    ];
+            {
+                title: 'Pemasukan',
+                href: '#',
+                icon: TrendingDown,
+            },
+            {
+                title: 'Pengeluaran',
+                href: expenses.index(),
+                icon: TrendingDown,
+            },
+            {
+                title: '',
+                href: expenses.index(),
+                icon: TrendingDown,
+            },
+            {
+                title: 'Laporan Keuangan',
+                href: dashboard(),
+                icon: LayoutGrid,
+            },
+        ];
+    } else {
+        return [];
+    }
 });
 </script>
 
@@ -142,7 +146,11 @@ const reportNavItems = computed<NavItem[]>(() => {
 
         <SidebarContent>
             <NavMain :items="mainNavItems" sidebar-group-label="Manajemen" />
-            <NavMain :items="reportNavItems" sidebar-group-label="Laporan" />
+            <NavMain
+                v-if="isOwner"
+                :items="reportNavItems"
+                sidebar-group-label="Laporan"
+            />
         </SidebarContent>
 
         <SidebarFooter>

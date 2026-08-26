@@ -1,9 +1,12 @@
+import { createApp, h, type DefineComponent } from 'vue'; // <-- Tambahkan ini di bagian atas
 import { createInertiaApp } from '@inertiajs/vue3';
 import { initializeTheme } from '@/composables/useAppearance';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
+import PrimeVue from 'primevue/config';
+import Aura from '@primevue/themes/aura';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -26,6 +29,21 @@ createInertiaApp({
             default:
                 return AppLayout;
         }
+    },
+    setup({ el, App, props, plugin }) {
+        createApp({ render: () => h(App, props) })
+            .use(plugin)
+            // Tambahkan PrimeVue di sini
+            .use(PrimeVue, {
+                theme: {
+                    preset: Aura,
+                    options: {
+                        darkModeSelector: '.dark', // Terintegrasi dengan script dark mode kamu
+                    },
+                },
+                licenseKey: import.meta.env.VITE_PRIMEUI_LICENSE_KEY,
+            })
+            .mount(el);
     },
     progress: {
         color: '#4B5563',

@@ -29,7 +29,7 @@ class UserSeeder extends Seeder
             'email' => 'chandra@example.com',
             'phone_number' => '085185008887',
             'role_id' => 2,
-            'outlet_id' => 1,
+            'outlet_id' => 2,
             'is_active' => true,
         ]);
     }

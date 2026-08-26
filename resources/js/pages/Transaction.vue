@@ -9,6 +9,7 @@ import {
     Footprints,
     Loader2,
     Pencil,
+    ReceiptText,
     Store,
     User,
     Wrench,
@@ -178,6 +179,18 @@ const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
         },
     );
 };
+
+// print nota
+// Fungsi Print PDF menggunakan URL string langsung
+function handlePrintPdf() {
+    if (!selectedTransaction.value?.id) return;
+
+    // Membangun URL secara langsung tanpa fungsi route()
+    const url = `/transactions/${selectedTransaction.value.id}/print-pdf`;
+
+    // Buka di tab baru browser
+    window.open(url, '_blank');
+}
 
 // Formatter Rupiah
 const formatRupiah = (val: string | number) => {
@@ -376,6 +389,27 @@ console.log(transactions.data[0]);
                                 selectedTransaction.outlet?.phone_number ?? '-'
                             }}
                         </p>
+                    </div>
+                </div>
+
+                <div class="rounded-lg border p-3">
+                    <div
+                        class="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground"
+                    >
+                        <ReceiptText class="h-4 w-4" /> Invoice
+                    </div>
+
+                    <div class="flex gap-1">
+                        <Button variant="secondary" @click="handlePrintPdf">
+                            Print Invoice
+                        </Button>
+                        <Button class="bg-green-500 text-white">
+                            <img
+                                src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/whatsapp/mono.svg"
+                                alt="WhatsApp"
+                                class="h-4 w-4"
+                            />Kirim WhatsApp</Button
+                        >
                     </div>
                 </div>
 

@@ -20,7 +20,7 @@ class ExpenseSeeder extends Seeder
             'img_attachment' => null,
             'expense_category_id' => 4,
             'user_id' => 2,
-            'outlet_id' => 1,
+            'outlet_id' => 2,
         ]);
     }
 }

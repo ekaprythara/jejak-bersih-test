@@ -33,7 +33,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');
 
     Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
-    Route::resource('expenses', ExpenseController::class);
+
+
+    Route::prefix('expenses')->group(function () {
+        // Customers (Akses untuk semua User Terautentikasi)
+        Route::get('/', [ExpenseController::class, 'index'])->name('expenses.index');
+        Route::post('/', [ExpenseController::class, 'store'])->name('expenses.store');
+        Route::get('/print/pdf', [ExpenseController::class, 'printPdf'])->name('expenses.print');
+
+        Route::put('/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+        Route::delete('/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+    });
+
+
 
     // Customers (Akses untuk semua User Terautentikasi)
     Route::prefix('customers')->group(function () {
@@ -104,6 +116,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // 2. Route untuk memperbarui status stepper pengerjaan sepatu
         Route::patch('/transactions/{transaction}/shoe-status', [TransactionController::class, 'updateStatus'])
             ->name('transactions.update-shoe-status');
+
+        Route::get('/transactions/{transaction}/print-pdf', [TransactionController::class, 'printPdf'])
+            ->name('transactions.print-pdf');
     });
 });
 require __DIR__ . '/settings.php';

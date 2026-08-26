@@ -14,6 +14,12 @@ class OutletSeeder extends Seeder
     public function run(): void
     {
         Outlet::factory()->create([
+            'name' => 'Pusat',
+            'address' => '-',
+            'phone_number' => '-'
+        ]);
+
+        Outlet::factory()->create([
             'name' => 'Pandu',
             'address' => 'Jalan Pandu No. 12, Sumerta Kelod, Denpasar',
             'phone_number' => '0895413368766'

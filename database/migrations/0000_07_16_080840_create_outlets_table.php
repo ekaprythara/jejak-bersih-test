@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('address');
             $table->string('phone_number')->unique();
+            $table->boolean('is_hq')->default(false);
             $table->timestamps();
         });
     }
