@@ -54,11 +54,18 @@
         <div class="grid grid-cols-2 gap-4 text-xs">
             <div class="flex items-center gap-2">
                 <span class=" text-slate-500">Periode Tanggal:</span>
-                <span class="font-semibold text-slate-900">
+                @if ($startDate === $endDate)
+                    <span class="font-semibold text-slate-900">
+                    {{ \Carbon\Carbon::parse($startDate)->locale('id')->isoFormat('D MMMM YYYY') }} 
+                </span>
+                @else
+ <span class="font-semibold text-slate-900">
                     {{ $startDate ? \Carbon\Carbon::parse($startDate)->locale('id')->isoFormat('D MMMM YYYY') : 'Awal' }} 
-                    s/d 
+                    –
                     {{ $endDate ? \Carbon\Carbon::parse($endDate)->locale('id')->isoFormat('D MMMM YYYY') : 'Hari Ini' }}
                 </span>
+                @endif
+               
             </div>
             <div class="flex items-center gap-2">
                 <span class=" text-slate-500">Total Transaksi:</span>

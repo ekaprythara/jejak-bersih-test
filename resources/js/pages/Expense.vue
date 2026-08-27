@@ -7,6 +7,8 @@ import {
     MoveUpRight,
     FileUp,
     CalendarIcon,
+    X,
+    FunnelX,
 } from '@lucide/vue';
 import type { ColumnDef } from '@tanstack/vue-table';
 import dayjs from 'dayjs';
@@ -167,6 +169,7 @@ const selectedCategory = ref<string>(
     filters.category_id ? String(filters.category_id) : 'all',
 );
 
+const showResetSorting = ref(false);
 // 2. Watch perubahan nilai selectedOutlet dan selectedCategory
 watch([selectedOutlet, selectedCategory], ([newOutlet, newCategory]) => {
     const params: Record<string, string | null> = {
@@ -185,6 +188,12 @@ watch([selectedOutlet, selectedCategory], ([newOutlet, newCategory]) => {
         preserveScroll: true,
         replace: true,
     });
+
+    if (selectedOutlet.value === 'all' && selectedCategory.value === 'all') {
+        showResetSorting.value = false;
+    } else {
+        showResetSorting.value = true;
+    }
 });
 
 const isExportDialogOpen = ref(false);
@@ -194,9 +203,11 @@ const startDatePicker = ref();
 const endDatePicker = ref();
 
 // Form Inertia standar (Bebas penamaan, kita beri nama `form`)
+const todayDate = new Date().toISOString().split('T')[0];
+// Hasil: "2026-08-27"
 const form = useForm({
-    start_date: '',
-    end_date: '',
+    start_date: todayDate || '',
+    end_date: todayDate || '',
     outlet_id: 'all',
     expense_category_id: 'all',
 });
@@ -417,6 +428,21 @@ const columns: ColumnDef<ExpenseType>[] = [
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        <Button
+                            variant="outline"
+                            class="text-red-500 hover:bg-white hover:text-red-500/70"
+                            title="Reset Filter"
+                            v-if="showResetSorting"
+                            @click="
+                                router.get(
+                                    '/expenses',
+                                    {},
+                                    { replace: true, preserveState: false },
+                                )
+                            "
+                            ><FunnelX
+                        /></Button>
                     </div>
 
                     <div class="ms-auto flex gap-1">
@@ -970,7 +996,6 @@ const columns: ColumnDef<ExpenseType>[] = [
     </Dialog>
 
     <!-- Dialog Edit Pengeluaran -->
-
     <Dialog v-model:open="isEditModalOpen">
         <DialogContent class="rounded-2xl sm:max-w-120">
             <DialogHeader>

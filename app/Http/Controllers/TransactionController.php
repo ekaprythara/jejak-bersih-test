@@ -44,6 +44,7 @@ class TransactionController extends Controller
 
             'transactionStatus' => Status::where('type', 'transaction_progress')->get(),
             'shoeStatuses' => Status::where('type', 'shoes_progress')->get(),
+
         ]);
     }
 
@@ -55,7 +56,6 @@ class TransactionController extends Controller
             'transactionShoes.shoeServices.service',
             'transactionShoes.status',
         ]);
-
         return Pdf::view('prints.invoice-pdf', [
             'transaction' => $transaction,
         ])

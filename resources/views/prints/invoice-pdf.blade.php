@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Nota #{{ $transaction->invoice_number ?? $transaction->id }}</title>
+    <title>Invoice {{ $transaction->invoice_number ?? $transaction->id }}</title>
     <!-- Script Tailwind v4 -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>

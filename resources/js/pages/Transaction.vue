@@ -7,8 +7,10 @@ import {
     Eye,
     FileText,
     Footprints,
+    Link,
     Loader2,
     Pencil,
+    Printer,
     ReceiptText,
     Store,
     User,
@@ -17,7 +19,8 @@ import {
 import type { ColumnDef } from '@tanstack/vue-table';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { h, ref } from 'vue';
+import { computed, h, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +32,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import tracking from '@/routes/tracking';
 import {
     index,
     updateShoeDetail,
@@ -63,6 +67,14 @@ type ShoeStatusOption = StatusType & { id: number; isFinalStep: boolean };
 const isDetailOpen = ref(false);
 const isEditOpen = ref(false);
 const selectedTransaction = ref<TransactionType | null>(null);
+
+// Menggunakan computed property agar reaktif dan aman
+const baseUrl = computed(() => {
+    // Mengambil domain saat ini (termasuk http/https) + path tracking
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+    return `${origin}`;
+});
 
 // State untuk Indikator Loading per Sepatu saat Update Stepper
 const updatingShoeId = ref<number | null>(null);
@@ -186,12 +198,31 @@ function handlePrintPdf() {
     if (!selectedTransaction.value?.id) return;
 
     // Membangun URL secara langsung tanpa fungsi route()
-    const url = `/transactions/${selectedTransaction.value.id}/print-pdf`;
+    const url = `/transactions/${selectedTransaction.value.invoice_number}/print-pdf`;
 
     // Buka di tab baru browser
     window.open(url, '_blank');
 }
 
+const whatsappLink = computed(() => {
+    // Bersihkan nomor HP dari karakter selain angka & ubah 0 di depan jadi 62
+    const phoneNumber =
+        selectedTransaction.value?.customer.phone_number.slice(1) || '';
+
+    const invoiceNumber = selectedTransaction.value?.invoice_number;
+    const customerName = selectedTransaction.value?.customer.name;
+
+    // Susun pesan WhatsApp dengan format \n untuk enter/baris baru
+    const message =
+        `Halo Kak ${customerName}, terima kasih telah menggunakan layanan Bersih Jejak.\n\n` +
+        `Berikut detail transaksi Anda:\n` +
+        `No. Invoice: ${invoiceNumber}\n\n` +
+        `Kak ${customerName} dapat mengecek status pengerjaan sepatu melalui link berikut:\n` +
+        `http://bersih-jejak.test/tracking/${invoiceNumber}\n\n` +
+        `Terima kasih!`;
+
+    return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+});
 // Formatter Rupiah
 const formatRupiah = (val: string | number) => {
     const numericValue = typeof val === 'string' ? parseFloat(val) : val;
@@ -205,6 +236,18 @@ const formatRupiah = (val: string | number) => {
         currency: 'IDR',
         maximumFractionDigits: 0,
     }).format(numericValue);
+};
+
+const isLinkCopied = ref(false);
+
+const handleCopyLink = async () => {
+    toast.success('Link Berhasil di Salin');
+
+    isLinkCopied.value = true;
+
+    setTimeout(() => {
+        isLinkCopied.value = false;
+    }, 4000);
 };
 
 // Definisi Kolom TanStack Table
@@ -292,8 +335,6 @@ const columns: ColumnDef<TransactionType>[] = [
         },
     },
 ];
-
-console.log(transactions.data[0]);
 </script>
 
 <template>
@@ -392,7 +433,7 @@ console.log(transactions.data[0]);
                     </div>
                 </div>
 
-                <div class="rounded-lg border p-3">
+                <div class="flex flex-col gap-2 rounded-lg border p-3">
                     <div
                         class="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground"
                     >
@@ -400,17 +441,51 @@ console.log(transactions.data[0]);
                     </div>
 
                     <div class="flex gap-1">
-                        <Button variant="secondary" @click="handlePrintPdf">
-                            Print Invoice
+                        <Button variant="outline" @click="handlePrintPdf">
+                            <Printer class="h-4 w-4" />
+                            <span>Cetak Invoice</span>
                         </Button>
-                        <Button class="bg-green-500 text-white">
-                            <img
-                                src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/whatsapp/mono.svg"
-                                alt="WhatsApp"
-                                class="h-4 w-4"
-                            />Kirim WhatsApp</Button
+
+                        <a
+                            :href="whatsappLink"
+                            target="_blank"
+                            rel="noopener noreferrer"
                         >
+                            <Button
+                                variant="outline"
+                                class="flex items-center gap-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                    class="h-4 w-4 fill-emerald-500"
+                                >
+                                    <path
+                                        d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"
+                                    />
+                                </svg>
+                                <span>Kirim WhatsApp</span>
+                            </Button>
+                        </a>
+
+                        <Button variant="outline" @click="handleCopyLink">
+                            <!-- Tampilkan ikon Check jika baru disalin, tampilkan ikon Copy/Link jika belum -->
+                            <Check v-if="isLinkCopied" class="h-4 w-4" />
+                            <Link v-else class="h-4 w-4" />
+                            <span>{{
+                                isLinkCopied ? 'Tersalin!' : 'Salin Link'
+                            }}</span>
+                        </Button>
                     </div>
+
+                    <p
+                        class="rounded-md border bg-slate-50/50 p-2 font-mono text-xs text-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
+                    >
+                        {{
+                            `${baseUrl}${tracking.show({ invoice: selectedTransaction.invoice_number }).url}`
+                        }}
+                    </p>
                 </div>
 
                 <!-- Status & Pembayaran -->
@@ -1137,7 +1212,6 @@ console.log(transactions.data[0]);
                     </p>
                 </div>
             </div>
-
             <DialogFooter>
                 <Button variant="outline" @click="isEditOpen = false"
                     >Tutup</Button

@@ -117,7 +117,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('/transactions/{transaction}/shoe-status', [TransactionController::class, 'updateStatus'])
             ->name('transactions.update-shoe-status');
 
-        Route::get('/transactions/{transaction}/print-pdf', [TransactionController::class, 'printPdf'])
+        // Khusus untuk routes ini menggunakan invoice number sebagai id
+        Route::get('/transactions/{transaction:invoice_number}/print-pdf', [TransactionController::class, 'printPdf'])
             ->name('transactions.print-pdf');
     });
 });

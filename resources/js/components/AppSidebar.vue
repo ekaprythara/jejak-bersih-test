@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    FileChartColumn,
     LayoutGrid,
     ReceiptText,
     ShieldUser,
@@ -8,8 +9,10 @@ import {
     Sparkles,
     Store,
     TrendingDown,
+    TrendingUp,
     UsersRound,
 } from '@lucide/vue';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -31,7 +34,6 @@ import services from '@/routes/services';
 import transactions from '@/routes/transactions';
 import users from '@/routes/users';
 import type { NavItem } from '@/types';
-import { computed } from 'vue';
 
 const page = usePage();
 const isOwner = page.props.auth.isOwner;
@@ -76,7 +78,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             {
                 title: 'Transaksi',
                 href: transactions.index(),
-                icon: ShoppingCart,
+                icon: ReceiptText,
             },
             {
                 title: 'Pelanggan',
@@ -106,7 +108,7 @@ const reportNavItems = computed<NavItem[]>(() => {
             {
                 title: 'Pemasukan',
                 href: '#',
-                icon: TrendingDown,
+                icon: TrendingUp,
             },
             {
                 title: 'Pengeluaran',
@@ -114,14 +116,9 @@ const reportNavItems = computed<NavItem[]>(() => {
                 icon: TrendingDown,
             },
             {
-                title: '',
-                href: expenses.index(),
-                icon: TrendingDown,
-            },
-            {
                 title: 'Laporan Keuangan',
-                href: dashboard(),
-                icon: LayoutGrid,
+                href: '#',
+                icon: FileChartColumn,
             },
         ];
     } else {
