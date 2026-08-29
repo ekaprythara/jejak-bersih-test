@@ -15,7 +15,7 @@ class CustomerController extends Controller
     public function index()
     {
         return inertia('Customer', [
-            'customers' => Customer::latest()->paginate(10),
+            'customers' => Customer::with('transactions')->latest()->paginate(10),
             'totalCustomers' => Customer::count(),
             'newCustomers' => Customer::where('created_at', '>=', now()->subDays(7)->startOfDay())->count(),
         ]);

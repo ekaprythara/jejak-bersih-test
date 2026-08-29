@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Spatie\LaravelPdf\Facades\Pdf;
 
 class TransactionController extends Controller
@@ -23,29 +24,39 @@ class TransactionController extends Controller
     {
         $user = Auth::user();
 
-        return inertia('Transaction', [
-            'transactions' => Transaction::with([
+        $transactions = Transaction::query()
+            ->with([
                 'customer',
                 'outlet',
                 'status',
                 'transactionShoes.shoeServices.service',
                 'transactionShoes.status',
             ])
-                ->latest()
-                ->paginate(10)
-                ->through(function ($transaction) {
-                    // Opsional: Memastikan key JSON berubah dari camelCase (transactionShoes) 
-                    // menjadi snake_case (transaction_shoes) agar sesuai TypeScript
-                    $array = $transaction->toArray();
-                    $array['transaction_shoes'] = $transaction->transactionShoes;
-                    return $array;
-                }),
+            // Safely filter by outlet relation
+            ->when($user->outlet, function ($query, $outlet) {
+                $query->whereHas('outlet', function ($q) use ($outlet) {
+                    $q->where('name', $outlet->name);
+                });
+            })
+            ->latest()
+            ->paginate(10);
 
-
+        return inertia('Transaction', [
+            'transactions' => $transactions,
             'transactionStatus' => Status::where('type', 'transaction_progress')->get(),
             'shoeStatuses' => Status::where('type', 'shoes_progress')->get(),
-
         ]);
+    }
+
+    public function updatePayment(Request $request, Transaction $transaction)
+    {
+        $transaction->update([
+            'payment_status' => $request->payment_status,
+            'payment_method' => $request->payment_method,
+            'notes'          => $request->notes,
+        ]);
+
+        return redirect()->back()->with('success', 'Detail pembayaran berhasil diperbarui.');
     }
 
     public function printPdf(Transaction $transaction)

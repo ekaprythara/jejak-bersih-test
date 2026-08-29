@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
+    Banknote,
     Check,
     CreditCard,
     Edit,
@@ -32,6 +33,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import tracking from '@/routes/tracking';
 import {
     index,
@@ -61,28 +69,29 @@ defineOptions({
     },
 });
 
-// Tipe ekstensi untuk opsi status pengerjaan sepatu yang memiliki ID
 type ShoeStatusOption = StatusType & { id: number; isFinalStep: boolean };
 
 const isDetailOpen = ref(false);
 const isEditOpen = ref(false);
+const isUpdatePaymentModalOpen = ref(false);
+const isEditShoeOpen = ref(false);
+
 const selectedTransaction = ref<TransactionType | null>(null);
+const editingShoe = ref<TransactionShoesType | null>(null);
+const updatingShoeId = ref<number | null>(null);
 
-// Menggunakan computed property agar reaktif dan aman
+const { transactions, shoeStatuses, transactionStatus } = defineProps<{
+    transactions: PaginatedResponse<TransactionType>;
+    transactionStatus: StatusType[];
+    shoeStatuses: ShoeStatusOption[];
+}>();
+
 const baseUrl = computed(() => {
-    // Mengambil domain saat ini (termasuk http/https) + path tracking
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-
     return `${origin}`;
 });
 
-// State untuk Indikator Loading per Sepatu saat Update Stepper
-const updatingShoeId = ref<number | null>(null);
-
-// State & Form untuk Modal Edit Detail Sepatu
-const isEditShoeOpen = ref(false);
-const editingShoe = ref<TransactionShoesType | null>(null);
-
+// Form Edit Detail Sepatu
 const shoeForm = useForm({
     shoe_id: null as number | null,
     shoe_brand: '',
@@ -91,28 +100,36 @@ const shoeForm = useForm({
     shoe_condition: '',
 });
 
-// Menerima data dari Controller
-const { transactions, shoeStatuses } = defineProps<{
-    transactions: PaginatedResponse<TransactionType>;
-    shoeStatuses: ShoeStatusOption[];
-}>();
+// Form Edit Pembayaran
+const paymentForm = useForm({
+    payment_status: '',
+    payment_method: '',
+    notes: '',
+});
 
-// Open Detail Modal (Read-Only)
+// Handler Modal Actions
 const handleViewDetail = (transaction: TransactionType) => {
     selectedTransaction.value = transaction;
     isDetailOpen.value = true;
 };
 
-// Open Edit Modal (Interactive Edit Status & Detail)
 const handleViewEdit = (transaction: TransactionType) => {
     selectedTransaction.value = transaction;
     isEditOpen.value = true;
 };
 
-// Open Modal Popup Edit Detail Sepatu
+const handleOpenEditPayment = () => {
+    if (!selectedTransaction.value) return;
+    paymentForm.payment_status = selectedTransaction.value.payment_status;
+    paymentForm.payment_method =
+        selectedTransaction.value.payment_method || 'cash';
+    paymentForm.notes = selectedTransaction.value.notes || '';
+    isUpdatePaymentModalOpen.value = true;
+};
+
 const handleOpenEditShoe = (shoe: TransactionShoesType) => {
     editingShoe.value = shoe;
-    shoeForm.shoe_id = shoe.id;
+    shoeForm.shoe_id = Number(shoe.id);
     shoeForm.shoe_brand = shoe.shoe_brand || '';
     shoeForm.shoe_color = shoe.shoe_color || '';
     shoeForm.shoe_size = shoe.shoe_size ? String(shoe.shoe_size) : '';
@@ -121,18 +138,16 @@ const handleOpenEditShoe = (shoe: TransactionShoesType) => {
     isEditShoeOpen.value = true;
 };
 
-// Handle Submit Edit Detail Sepatu
+// Form Submitters
 const submitEditShoe = () => {
-    if (!selectedTransaction.value || !editingShoe.value) {
-        return;
-    }
+    if (!selectedTransaction.value || !editingShoe.value) return;
 
     shoeForm.patch(updateShoeDetail(selectedTransaction.value.id), {
         preserveScroll: true,
         onSuccess: () => {
             isEditShoeOpen.value = false;
+            toast.success('Detail sepatu berhasil diperbarui');
 
-            // Sync data lokal agar UI langsung terupdate
             if (selectedTransaction.value && editingShoe.value) {
                 const targetShoe =
                     selectedTransaction.value.transaction_shoes?.find(
@@ -149,11 +164,30 @@ const submitEditShoe = () => {
     });
 };
 
-// Handle Update Status Pengerjaan Sepatu via Stepper
-const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
+const submitUpdatePayment = () => {
     if (!selectedTransaction.value) {
         return;
     }
+
+    paymentForm.patch(`/transactions/${selectedTransaction.value.id}/payment`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            isUpdatePaymentModalOpen.value = false;
+            toast.success('Status pembayaran berhasil diperbarui');
+
+            if (selectedTransaction.value) {
+                selectedTransaction.value.payment_status =
+                    paymentForm.payment_status as PaymentStatusEnum;
+                selectedTransaction.value.payment_method =
+                    paymentForm.payment_method;
+                selectedTransaction.value.notes = paymentForm.notes;
+            }
+        },
+    });
+};
+
+const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
+    if (!selectedTransaction.value) return;
 
     updatingShoeId.value = shoeId;
 
@@ -166,7 +200,7 @@ const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
         {
             preserveScroll: true,
             onSuccess: () => {
-                // Sync status di state lokal modal agar badge & stepper animasi langsung berpindah
+                toast.success('Status pengerjaan berhasil diperbarui');
                 if (selectedTransaction.value) {
                     const targetShoe =
                         selectedTransaction.value.transaction_shoes?.find(
@@ -181,6 +215,7 @@ const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
 
                         if (matchedStatus && targetShoe.status) {
                             targetShoe.status.name = matchedStatus.name;
+                            targetShoe.status.step = matchedStatus.step;
                         }
                     }
                 }
@@ -192,44 +227,33 @@ const handleUpdateShoeStatus = (shoeId: number, newStatusId: number) => {
     );
 };
 
-// print nota
-// Fungsi Print PDF menggunakan URL string langsung
 function handlePrintPdf() {
     if (!selectedTransaction.value?.id) return;
-
-    // Membangun URL secara langsung tanpa fungsi route()
     const url = `/transactions/${selectedTransaction.value.invoice_number}/print-pdf`;
-
-    // Buka di tab baru browser
     window.open(url, '_blank');
 }
 
 const whatsappLink = computed(() => {
-    // Bersihkan nomor HP dari karakter selain angka & ubah 0 di depan jadi 62
     const phoneNumber =
-        selectedTransaction.value?.customer.phone_number.slice(1) || '';
-
+        selectedTransaction.value?.customer.phone_number.replace(/^0/, '62') ||
+        '';
     const invoiceNumber = selectedTransaction.value?.invoice_number;
     const customerName = selectedTransaction.value?.customer.name;
 
-    // Susun pesan WhatsApp dengan format \n untuk enter/baris baru
     const message =
         `Halo Kak ${customerName}, terima kasih telah menggunakan layanan Bersih Jejak.\n\n` +
         `Berikut detail transaksi Anda:\n` +
         `No. Invoice: ${invoiceNumber}\n\n` +
         `Kak ${customerName} dapat mengecek status pengerjaan sepatu melalui link berikut:\n` +
-        `http://bersih-jejak.test/tracking/${invoiceNumber}\n\n` +
+        `${baseUrl.value}/tracking/${invoiceNumber}\n\n` +
         `Terima kasih!`;
 
     return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 });
-// Formatter Rupiah
+
 const formatRupiah = (val: string | number) => {
     const numericValue = typeof val === 'string' ? parseFloat(val) : val;
-
-    if (isNaN(numericValue)) {
-        return 'Rp 0';
-    }
+    if (isNaN(numericValue)) return 'Rp 0';
 
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
@@ -239,19 +263,19 @@ const formatRupiah = (val: string | number) => {
 };
 
 const isLinkCopied = ref(false);
-
 const handleCopyLink = async () => {
-    toast.success('Link Berhasil di Salin');
+    if (!selectedTransaction.value) return;
+    const trackingUrl = `${baseUrl.value}/tracking/${selectedTransaction.value.invoice_number}`;
+    await navigator.clipboard.writeText(trackingUrl);
+    toast.success('Link Berhasil disalin');
 
     isLinkCopied.value = true;
-
     setTimeout(() => {
         isLinkCopied.value = false;
     }, 4000);
 };
 
-// Definisi Kolom TanStack Table
-const columns: ColumnDef<TransactionType>[] = [
+const columns = computed<ColumnDef<TransactionType>[]>(() => [
     {
         accessorKey: 'invoice_number',
         header: 'No. Invoice',
@@ -268,7 +292,6 @@ const columns: ColumnDef<TransactionType>[] = [
         header: 'Tenggat Selesai',
         cell: ({ row }) => {
             const overdueDate = row.original.overdue_date;
-
             return overdueDate ? dayjs(overdueDate).fromNow() : '-';
         },
     },
@@ -277,7 +300,6 @@ const columns: ColumnDef<TransactionType>[] = [
         header: 'Status Transaksi',
         cell: ({ row }) => {
             const status = row.original.status?.name;
-
             return status
                 ? h(Badge, { variant: 'secondary' }, () => status)
                 : '-';
@@ -310,7 +332,6 @@ const columns: ColumnDef<TransactionType>[] = [
         header: 'Aksi',
         cell: ({ row }) => {
             return h('div', { class: 'flex items-center gap-1.5' }, [
-                // Tombol Lihat (Detail)
                 h(
                     Button,
                     {
@@ -334,7 +355,7 @@ const columns: ColumnDef<TransactionType>[] = [
             ]);
         },
     },
-];
+]);
 </script>
 
 <template>
@@ -347,7 +368,6 @@ const columns: ColumnDef<TransactionType>[] = [
             class="rounded-xl border border-sidebar-border/70 bg-white p-8 dark:border-sidebar-border dark:bg-sidebar"
         >
             <div class="flex flex-col gap-5">
-                <!-- DataTable Component -->
                 <DataTable
                     :columns="columns"
                     :data="transactions.data"
@@ -365,7 +385,9 @@ const columns: ColumnDef<TransactionType>[] = [
                     <FileText class="h-5 w-5 text-primary" />
                     Detail Transaksi
                 </DialogTitle>
-                <DialogDescription></DialogDescription>
+                <DialogDescription>
+                    Informasi lengkap mengenai transaksi pelanggan.
+                </DialogDescription>
             </DialogHeader>
 
             <div v-if="selectedTransaction" class="space-y-4 py-2">
@@ -433,16 +455,21 @@ const columns: ColumnDef<TransactionType>[] = [
                     </div>
                 </div>
 
+                <!-- Aksi Invoice & Link Tracking -->
                 <div class="flex flex-col gap-2 rounded-lg border p-3">
                     <div
                         class="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground"
                     >
-                        <ReceiptText class="h-4 w-4" /> Invoice
+                        <ReceiptText class="h-4 w-4" /> Invoice & Tracking
                     </div>
 
-                    <div class="flex gap-1">
-                        <Button variant="outline" @click="handlePrintPdf">
-                            <Printer class="h-4 w-4" />
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            @click="handlePrintPdf"
+                        >
+                            <Printer class="mr-1.5 h-4 w-4" />
                             <span>Cetak Invoice</span>
                         </Button>
 
@@ -453,7 +480,8 @@ const columns: ColumnDef<TransactionType>[] = [
                         >
                             <Button
                                 variant="outline"
-                                class="flex items-center gap-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                                size="sm"
+                                class="flex items-center gap-1.5 border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -469,10 +497,13 @@ const columns: ColumnDef<TransactionType>[] = [
                             </Button>
                         </a>
 
-                        <Button variant="outline" @click="handleCopyLink">
-                            <!-- Tampilkan ikon Check jika baru disalin, tampilkan ikon Copy/Link jika belum -->
-                            <Check v-if="isLinkCopied" class="h-4 w-4" />
-                            <Link v-else class="h-4 w-4" />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            @click="handleCopyLink"
+                        >
+                            <Check v-if="isLinkCopied" class="mr-1.5 h-4 w-4" />
+                            <Link v-else class="mr-1.5 h-4 w-4" />
                             <span>{{
                                 isLinkCopied ? 'Tersalin!' : 'Salin Link'
                             }}</span>
@@ -480,15 +511,15 @@ const columns: ColumnDef<TransactionType>[] = [
                     </div>
 
                     <p
-                        class="rounded-md border bg-slate-50/50 p-2 font-mono text-xs text-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
+                        class="mt-1 rounded-md border bg-slate-50/50 p-2 font-mono text-xs text-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
                     >
                         {{
-                            `${baseUrl}${tracking.show({ invoice: selectedTransaction.invoice_number }).url}`
+                            `${baseUrl}/tracking/${selectedTransaction.invoice_number}`
                         }}
                     </p>
                 </div>
 
-                <!-- Status & Pembayaran -->
+                <!-- Status Pembayaran & Transaksi -->
                 <div class="space-y-3 rounded-lg border p-3">
                     <div
                         class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
@@ -513,7 +544,7 @@ const columns: ColumnDef<TransactionType>[] = [
                                 :variant="
                                     selectedTransaction.payment_status ===
                                     PaymentStatusEnum.Paid
-                                        ? 'success'
+                                        ? 'default'
                                         : 'destructive'
                                 "
                                 class="mt-1 capitalize"
@@ -539,7 +570,7 @@ const columns: ColumnDef<TransactionType>[] = [
                     </div>
                 </div>
 
-                <!-- Daftar Sepatu & Progress Status -->
+                <!-- Daftar Sepatu & Progress Status (Read-Only) -->
                 <div class="space-y-2">
                     <div
                         class="flex items-center justify-between text-xs font-semibold text-muted-foreground"
@@ -567,7 +598,7 @@ const columns: ColumnDef<TransactionType>[] = [
                         <div
                             v-for="(
                                 shoe, index
-                            ) in selectedTransaction.transaction_shoes as TransactionShoesType[]"
+                            ) in selectedTransaction.transaction_shoes"
                             :key="shoe.id || index"
                             class="rounded-lg border p-4 dark:border-slate-800"
                         >
@@ -667,7 +698,7 @@ const columns: ColumnDef<TransactionType>[] = [
                                 </p>
                             </div>
 
-                            <!-- Read-Only Stepper Pengerjaan Sepatu -->
+                            <!-- Read-Only Stepper -->
                             <div
                                 class="my-4 w-full rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/50"
                             >
@@ -684,7 +715,6 @@ const columns: ColumnDef<TransactionType>[] = [
                                             <div
                                                 class="relative flex items-center justify-center"
                                             >
-                                                <!-- Pulse Ping: Tampil jika step pengerjaan SEPATU INI aktif & belum final -->
                                                 <div
                                                     v-if="
                                                         st.step ===
@@ -693,8 +723,6 @@ const columns: ColumnDef<TransactionType>[] = [
                                                     "
                                                     class="absolute inline-flex h-11 w-11 animate-ping rounded-full bg-blue-400/40 dark:bg-blue-500/30"
                                                 />
-
-                                                <!-- Lingkaran Indicator -->
                                                 <div
                                                     class="relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all duration-300"
                                                     :class="[
@@ -710,7 +738,6 @@ const columns: ColumnDef<TransactionType>[] = [
                                                               : 'border border-slate-300 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800',
                                                     ]"
                                                 >
-                                                    <!-- Centang jika: Step Lampau OR (Step Aktif Sepatu & isFinalStep = true) -->
                                                     <Check
                                                         v-if="
                                                             st.step <
@@ -724,14 +751,12 @@ const columns: ColumnDef<TransactionType>[] = [
                                                         "
                                                         class="h-4 w-4 stroke-[2.5]"
                                                     />
-                                                    <!-- Angka jika belum selesai -->
                                                     <span v-else>{{
                                                         st.step
                                                     }}</span>
                                                 </div>
                                             </div>
 
-                                            <!-- Label Nama Status -->
                                             <span
                                                 class="max-w-20 text-center text-[11px] leading-tight font-medium transition-colors"
                                                 :class="[
@@ -751,7 +776,6 @@ const columns: ColumnDef<TransactionType>[] = [
                                             </span>
                                         </div>
 
-                                        <!-- Garis Penghubung antar Step -->
                                         <div
                                             v-if="
                                                 sIdx < shoeStatuses.length - 1
@@ -799,6 +823,7 @@ const columns: ColumnDef<TransactionType>[] = [
     </Dialog>
 
     <!-- Modal Edit Transaksi (Interactive Stepper & Quick Edit Shoe Detail) -->
+    <!-- Modal Edit Transaksi (Interactive Stepper Transaksi & Quick Edit Shoe Detail) -->
     <Dialog v-model:open="isEditOpen">
         <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
@@ -807,9 +832,9 @@ const columns: ColumnDef<TransactionType>[] = [
                     Edit Progress & Detail Sepatu
                 </DialogTitle>
                 <DialogDescription>
-                    Klik lingkaran status pada stepper untuk mengubah progress
-                    pengerjaan sepatu, atau klik ikon pensil untuk mengubah
-                    informasi sepatu.
+                    Klik lingkaran status pada stepper transaksi/sepatu untuk
+                    mengubah progress pengerjaan, atau klik ikon pensil untuk
+                    mengubah informasi.
                 </DialogDescription>
             </DialogHeader>
 
@@ -878,24 +903,139 @@ const columns: ColumnDef<TransactionType>[] = [
                     </div>
                 </div>
 
-                <!-- Status & Pembayaran -->
+                <!-- STEPPER TRANSAKSI UTAMA INTERAKTIF (DITAMBAHKAN KEMBALI) -->
+                <div
+                    class="my-4 w-full rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/50"
+                >
+                    <p
+                        class="mb-3 text-[11px] font-semibold text-muted-foreground"
+                    >
+                        Klik lingkaran status untuk memperbarui progress
+                        transaksi:
+                    </p>
+
+                    <div class="flex w-full items-start justify-between">
+                        <template
+                            v-for="(status, statusIndex) in transactionStatus &&
+                            transactionStatus.length > 0
+                                ? transactionStatus
+                                : [
+                                      { id: 1, name: 'Pesanan Diterima' },
+                                      { id: 2, name: 'Dalam Pengerjaan' },
+                                      { id: 3, name: 'Siap Diambil' },
+                                      { id: 4, name: 'Pesanan Selesai' },
+                                  ]"
+                            :key="status.id || statusIndex"
+                        >
+                            <!-- Tombol Step Status Transaksi -->
+                            <button
+                                type="button"
+                                class="group z-10 flex min-w-15 cursor-pointer flex-col items-center gap-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="
+                                    if (selectedTransaction) {
+                                        selectedTransaction.status_id =
+                                            status.id;
+                                        // panggil handler router/patch update transaksi di sini jika ada
+                                    }
+                                "
+                            >
+                                <div
+                                    class="relative flex items-center justify-center"
+                                >
+                                    <div
+                                        v-if="
+                                            selectedTransaction.status_id ===
+                                            status.id
+                                        "
+                                        class="absolute inline-flex h-11 w-11 animate-ping rounded-full bg-blue-400/40 dark:bg-blue-500/30"
+                                    />
+                                    <div
+                                        class="relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all duration-300 group-hover:scale-110"
+                                        :class="[
+                                            selectedTransaction.status_id ===
+                                            status.id
+                                                ? 'scale-105 bg-blue-600 text-white shadow-lg ring-4 shadow-blue-500/30 ring-blue-100 dark:ring-blue-950'
+                                                : status.id <
+                                                    selectedTransaction.status_id
+                                                  ? 'bg-emerald-500 text-white shadow-xs'
+                                                  : 'border border-slate-300 bg-white text-slate-400 group-hover:border-blue-400 dark:border-slate-700 dark:bg-slate-800',
+                                        ]"
+                                    >
+                                        <Check
+                                            v-if="
+                                                status.id <
+                                                selectedTransaction.status_id
+                                            "
+                                            class="h-4 w-4 stroke-[2.5]"
+                                        />
+                                        <span v-else>{{
+                                            statusIndex + 1
+                                        }}</span>
+                                    </div>
+                                </div>
+
+                                <span
+                                    class="max-w-20 text-center text-[11px] leading-tight font-medium transition-colors"
+                                    :class="[
+                                        selectedTransaction.status_id ===
+                                        status.id
+                                            ? 'font-bold text-blue-600 dark:text-blue-400'
+                                            : status.id <
+                                                selectedTransaction.status_id
+                                              ? 'font-semibold text-emerald-600 dark:text-emerald-400'
+                                              : 'text-slate-500 group-hover:text-slate-800 dark:text-slate-400 dark:group-hover:text-slate-200',
+                                    ]"
+                                >
+                                    {{ status.name }}
+                                </span>
+                            </button>
+
+                            <!-- Line Connector -->
+                            <div
+                                v-if="
+                                    statusIndex <
+                                    (transactionStatus &&
+                                    transactionStatus.length > 0
+                                        ? transactionStatus
+                                        : [1, 2, 3, 4]
+                                    ).length -
+                                        1
+                                "
+                                class="mt-4 h-0.5 min-w-5 flex-1 transition-colors duration-300"
+                                :class="[
+                                    status.id < selectedTransaction.status_id
+                                        ? 'bg-emerald-500'
+                                        : 'bg-slate-200 dark:bg-slate-700',
+                                ]"
+                            />
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Status Pembayaran & Catatan dengan Aksi Edit -->
                 <div class="space-y-3 rounded-lg border p-3">
                     <div
-                        class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
+                        class="flex items-center justify-between gap-1.5 text-xs font-semibold text-muted-foreground"
                     >
-                        <CreditCard class="h-4 w-4" /> Pembayaran & Status
+                        <div class="flex items-center gap-2">
+                            <CreditCard class="h-4 w-4" />
+                            <span>Pembayaran & Status</span>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            class="h-6 w-6 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
+                            title="Edit Pembayaran"
+                            @click="handleOpenEditPayment"
+                        >
+                            <Pencil class="h-3.5 w-3.5" />
+                        </Button>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-2 text-sm">
-                        <div>
-                            <p class="text-xs text-muted-foreground">
-                                Status Transaksi
-                            </p>
-                            <Badge variant="secondary" class="mt-1 font-medium">
-                                {{ selectedTransaction.status?.name ?? '-' }}
-                            </Badge>
-                        </div>
-                        <div>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div
+                            class="flex flex-col items-center justify-center rounded-md bg-slate-50 p-2 dark:bg-slate-900"
+                        >
                             <p class="text-xs text-muted-foreground">
                                 Status Bayar
                             </p>
@@ -903,7 +1043,7 @@ const columns: ColumnDef<TransactionType>[] = [
                                 :variant="
                                     selectedTransaction.payment_status ===
                                     PaymentStatusEnum.Paid
-                                        ? 'success'
+                                        ? 'default'
                                         : 'destructive'
                                 "
                                 class="mt-1 capitalize"
@@ -916,7 +1056,9 @@ const columns: ColumnDef<TransactionType>[] = [
                                 }}
                             </Badge>
                         </div>
-                        <div>
+                        <div
+                            class="flex flex-col items-center justify-center rounded-md bg-slate-50 p-2 dark:bg-slate-900"
+                        >
                             <p class="text-xs text-muted-foreground">
                                 Metode Bayar
                             </p>
@@ -927,9 +1069,23 @@ const columns: ColumnDef<TransactionType>[] = [
                             </p>
                         </div>
                     </div>
+
+                    <div class="space-y-1">
+                        <p class="text-xs font-medium text-muted-foreground">
+                            Catatan Transaksi
+                        </p>
+                        <p
+                            class="rounded-md border bg-slate-50/50 p-2.5 text-xs text-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
+                        >
+                            {{
+                                selectedTransaction.notes ||
+                                'Tidak ada catatan tambahan'
+                            }}
+                        </p>
+                    </div>
                 </div>
 
-                <!-- Daftar Sepatu & Progress Status (Interactive) -->
+                <!-- Daftar Sepatu & Stepper Interactive per Sepatu -->
                 <div class="space-y-2">
                     <div
                         class="flex items-center justify-between text-xs font-semibold text-muted-foreground"
@@ -957,7 +1113,7 @@ const columns: ColumnDef<TransactionType>[] = [
                         <div
                             v-for="(
                                 shoe, index
-                            ) in selectedTransaction.transaction_shoes as TransactionShoesType[]"
+                            ) in selectedTransaction.transaction_shoes"
                             :key="shoe.id || index"
                             class="rounded-lg border p-4 dark:border-slate-800"
                         >
@@ -965,22 +1121,11 @@ const columns: ColumnDef<TransactionType>[] = [
                                 class="flex items-start justify-between border-b pb-3 dark:border-slate-800"
                             >
                                 <div>
-                                    <div class="flex items-center gap-2">
-                                        <h4
-                                            class="font-bold text-slate-900 dark:text-slate-100"
-                                        >
-                                            {{ shoe.shoe_brand }}
-                                        </h4>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-6 w-6 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
-                                            title="Edit Detail Sepatu"
-                                            @click="handleOpenEditShoe(shoe)"
-                                        >
-                                            <Pencil class="h-3.5 w-3.5" />
-                                        </Button>
-                                    </div>
+                                    <h4
+                                        class="font-bold text-slate-900 dark:text-slate-100"
+                                    >
+                                        {{ shoe.shoe_brand }}
+                                    </h4>
                                     <p class="text-xs text-muted-foreground">
                                         Warna: {{ shoe.shoe_color }} | Ukuran:
                                         {{ shoe.shoe_size || '-' }}
@@ -989,7 +1134,9 @@ const columns: ColumnDef<TransactionType>[] = [
 
                                 <div class="flex items-center gap-2">
                                     <div
-                                        v-if="updatingShoeId === shoe.id"
+                                        v-if="
+                                            updatingShoeId === Number(shoe.id)
+                                        "
                                         class="flex items-center gap-1 text-xs text-blue-600"
                                     >
                                         <Loader2
@@ -998,13 +1145,15 @@ const columns: ColumnDef<TransactionType>[] = [
                                         <span>Menyimpan...</span>
                                     </div>
 
-                                    <Badge
-                                        v-if="shoe.status?.name"
-                                        variant="outline"
-                                        class="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-6 w-6 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
+                                        title="Edit Detail Sepatu"
+                                        @click="handleOpenEditShoe(shoe)"
                                     >
-                                        {{ shoe.status.name }}
-                                    </Badge>
+                                        <Pencil class="h-3.5 w-3.5" />
+                                    </Button>
                                 </div>
                             </div>
 
@@ -1019,69 +1168,7 @@ const columns: ColumnDef<TransactionType>[] = [
                                 {{ shoe.shoe_condition }}
                             </p>
 
-                            <!-- Services List -->
-                            <div class="mt-3 space-y-1.5">
-                                <p
-                                    class="flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
-                                >
-                                    <Wrench class="h-3 w-3" /> Layanan Dipilih:
-                                </p>
-                                <div
-                                    v-if="
-                                        shoe.shoe_services &&
-                                        shoe.shoe_services.length > 0
-                                    "
-                                    class="divide-y rounded-md bg-slate-50 p-2.5 text-xs dark:divide-slate-800 dark:bg-slate-900"
-                                >
-                                    <div
-                                        v-for="serviceItem in shoe.shoe_services"
-                                        :key="serviceItem.id"
-                                        class="flex items-center justify-between py-1 first:pt-0 last:pb-0"
-                                    >
-                                        <div>
-                                            <p
-                                                class="font-medium text-slate-800 dark:text-slate-200"
-                                            >
-                                                {{
-                                                    serviceItem.service?.name ??
-                                                    '-'
-                                                }}
-                                            </p>
-                                            <p
-                                                v-if="
-                                                    serviceItem.service
-                                                        ?.estimated_days
-                                                "
-                                                class="text-[10px] text-muted-foreground"
-                                            >
-                                                Estimasi:
-                                                {{
-                                                    serviceItem.service
-                                                        .estimated_days
-                                                }}
-                                                Hari
-                                            </p>
-                                        </div>
-                                        <p
-                                            class="font-semibold text-slate-700 dark:text-slate-300"
-                                        >
-                                            {{
-                                                formatRupiah(
-                                                    serviceItem.subtotal_price,
-                                                )
-                                            }}
-                                        </p>
-                                    </div>
-                                </div>
-                                <p
-                                    v-else
-                                    class="text-xs text-muted-foreground italic"
-                                >
-                                    Tidak ada layanan terdaftar
-                                </p>
-                            </div>
-
-                            <!-- Stepper Progress Interactive -->
+                            <!-- Interactive Stepper Pengerjaan Sepatu -->
                             <div
                                 class="my-4 w-full rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/50"
                             >
@@ -1089,42 +1176,28 @@ const columns: ColumnDef<TransactionType>[] = [
                                     class="mb-3 text-[11px] font-semibold text-muted-foreground"
                                 >
                                     Klik lingkaran status untuk memperbarui
-                                    progress:
+                                    progress sepatu:
                                 </p>
 
                                 <div
                                     class="flex w-full items-start justify-between"
                                 >
                                     <template
-                                        v-for="(st, sIdx) in shoeStatuses &&
-                                        shoeStatuses.length > 0
-                                            ? shoeStatuses
-                                            : [
-                                                  { id: 1, name: 'Antrian' },
-                                                  {
-                                                      id: 2,
-                                                      name: 'Proses Cuci',
-                                                  },
-                                                  {
-                                                      id: 3,
-                                                      name: 'Pengeringan',
-                                                  },
-                                                  { id: 4, name: 'Selesai' },
-                                              ]"
-                                        :key="st.id || sIdx"
+                                        v-for="(st, sIdx) in shoeStatuses"
+                                        :key="st.id"
                                     >
                                         <button
                                             type="button"
                                             :disabled="
                                                 updatingShoeId === shoe.id
                                             "
+                                            class="group z-10 flex min-w-15 cursor-pointer flex-col items-center gap-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                             @click="
                                                 handleUpdateShoeStatus(
                                                     shoe.id,
                                                     st.id,
                                                 )
                                             "
-                                            class="group z-10 flex min-w-15 cursor-pointer flex-col items-center gap-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <div
                                                 class="relative flex items-center justify-center"
@@ -1175,13 +1248,7 @@ const columns: ColumnDef<TransactionType>[] = [
 
                                         <div
                                             v-if="
-                                                sIdx <
-                                                (shoeStatuses &&
-                                                shoeStatuses.length > 0
-                                                    ? shoeStatuses
-                                                    : [1, 2, 3, 4]
-                                                ).length -
-                                                    1
+                                                sIdx < shoeStatuses.length - 1
                                             "
                                             class="mt-4 h-0.5 min-w-5 flex-1 transition-colors duration-300"
                                             :class="[
@@ -1196,27 +1263,104 @@ const columns: ColumnDef<TransactionType>[] = [
                         </div>
                     </div>
                 </div>
-
-                <!-- Catatan Tambahan -->
-                <div class="space-y-1">
-                    <p class="text-xs font-medium text-muted-foreground">
-                        Catatan / Keterangan
-                    </p>
-                    <p
-                        class="rounded-md border bg-slate-50/50 p-3 text-sm text-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
-                    >
-                        {{
-                            selectedTransaction.notes ||
-                            'Tidak ada catatan tambahan'
-                        }}
-                    </p>
-                </div>
             </div>
+
             <DialogFooter>
                 <Button variant="outline" @click="isEditOpen = false"
                     >Tutup</Button
                 >
             </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <!-- Modal Form Popup Edit Pembayaran Transaksi -->
+    <Dialog v-model:open="isUpdatePaymentModalOpen">
+        <DialogContent class="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle class="flex items-center gap-2">
+                    <Banknote class="h-5 w-5 text-emerald-600" />
+                    Edit Detail Pembayaran
+                </DialogTitle>
+                <DialogDescription>
+                    Perbarui status pembayaran, metode bayar, dan catatan
+                    transaksi.
+                </DialogDescription>
+            </DialogHeader>
+
+            <form @submit.prevent="submitUpdatePayment" class="space-y-4 py-2">
+                <div class="space-y-1.5">
+                    <label
+                        class="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                        Status Pembayaran
+                    </label>
+                    <Select v-model="paymentForm.payment_status">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Pilih Status Bayar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="PaymentStatusEnum.Unpaid"
+                                >Belum Bayar</SelectItem
+                            >
+                            <SelectItem :value="PaymentStatusEnum.Paid"
+                                >Lunas</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label
+                        class="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                        Metode Pembayaran
+                    </label>
+                    <Select v-model="paymentForm.payment_method">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Pilih Metode Bayar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cash">Tunai (Cash)</SelectItem>
+                            <SelectItem value="qris">QRIS</SelectItem>
+                            <SelectItem value="transfer"
+                                >Bank Transfer</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label
+                        class="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                        Catatan Transaksi
+                    </label>
+                    <textarea
+                        v-model="paymentForm.notes"
+                        rows="3"
+                        class="w-full rounded-md border border-slate-300 bg-transparent px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none dark:border-slate-700"
+                        placeholder="Tambahkan catatan khusus transaksi di sini..."
+                    ></textarea>
+                </div>
+
+                <DialogFooter class="pt-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        :disabled="paymentForm.processing"
+                        @click="isUpdatePaymentModalOpen = false"
+                    >
+                        Batal
+                    </Button>
+                    <Button type="submit" :disabled="paymentForm.processing">
+                        {{
+                            paymentForm.processing
+                                ? 'Menyimpan...'
+                                : 'Simpan Perubahan'
+                        }}
+                    </Button>
+                </DialogFooter>
+            </form>
         </DialogContent>
     </Dialog>
 
@@ -1234,7 +1378,6 @@ const columns: ColumnDef<TransactionType>[] = [
             </DialogHeader>
 
             <form @submit.prevent="submitEditShoe" class="space-y-4 py-2">
-                <!-- Input Brand / Merk -->
                 <div class="space-y-1.5">
                     <label
                         class="text-xs font-semibold text-slate-700 dark:text-slate-300"
@@ -1257,7 +1400,6 @@ const columns: ColumnDef<TransactionType>[] = [
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
-                    <!-- Input Warna -->
                     <div class="space-y-1.5">
                         <label
                             class="text-xs font-semibold text-slate-700 dark:text-slate-300"
@@ -1279,7 +1421,6 @@ const columns: ColumnDef<TransactionType>[] = [
                         </p>
                     </div>
 
-                    <!-- Input Ukuran -->
                     <div class="space-y-1.5">
                         <label
                             class="text-xs font-semibold text-slate-700 dark:text-slate-300"
@@ -1301,7 +1442,6 @@ const columns: ColumnDef<TransactionType>[] = [
                     </div>
                 </div>
 
-                <!-- Input Kondisi Awal -->
                 <div class="space-y-1.5">
                     <label
                         class="text-xs font-semibold text-slate-700 dark:text-slate-300"
@@ -1326,8 +1466,8 @@ const columns: ColumnDef<TransactionType>[] = [
                     <Button
                         type="button"
                         variant="outline"
-                        @click="isEditShoeOpen = false"
                         :disabled="shoeForm.processing"
+                        @click="isEditShoeOpen = false"
                     >
                         Batal
                     </Button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, router } from '@inertiajs/vue3';
+import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Eye, Edit, Trash2 } from '@lucide/vue';
 import type { ColumnDef } from '@tanstack/vue-table';
 import dayjs from 'dayjs';
@@ -27,6 +27,8 @@ import { Label } from '@/components/ui/label';
 
 import { index, store, update, destroy } from '@/routes/customers';
 import type { CustomerType, PaginatedResponse } from '@/types/data-types';
+import NavUser from '@/components/NavUser.vue';
+import UserInfo from '@/components/UserInfo.vue';
 
 defineOptions({
     layout: {
@@ -118,12 +120,13 @@ const columns: ColumnDef<CustomerType>[] = [
     {
         accessorKey: 'name',
         header: 'Nama',
-        cell: (info) =>
-            h(
-                'span',
-                { class: 'font-semibold text-gray-800' },
-                `${info.getValue()}`,
-            ),
+        cell: (info) => {
+            const user = info.row.original;
+
+            return h('div', { class: 'flex flex-row items-center gap-2' }, [
+                h(UserInfo, { user: user }),
+            ]);
+        },
     },
     {
         accessorKey: 'phone_number',
@@ -136,8 +139,16 @@ const columns: ColumnDef<CustomerType>[] = [
         header: 'Bergabung pada',
         cell: ({ getValue }) => {
             const createdAt = getValue<string>();
+
             return createdAt ? dayjs(createdAt).fromNow() : '-';
         },
+    },
+    {
+        // Access the transactions array directly from the row object
+        accessorFn: (row) => row.transactions?.length ?? 0,
+        header: 'Jumlah Transaksi',
+        // Use getValue() from the cell context parameter
+        cell: (info) => `${info.getValue()}`,
     },
     {
         id: 'actions',

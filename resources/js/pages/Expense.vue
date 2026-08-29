@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Form, router, useForm } from '@inertiajs/vue3';
+import { Head, Form, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     Eye,
     Edit,
@@ -7,13 +7,12 @@ import {
     MoveUpRight,
     FileUp,
     CalendarIcon,
-    X,
     FunnelX,
 } from '@lucide/vue';
 import type { ColumnDef } from '@tanstack/vue-table';
 import dayjs from 'dayjs';
 import pickBy from 'lodash/pickBy';
-import { computed, h, ref, watch } from 'vue';
+import { h, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import InputError from '@/components/InputError.vue';
@@ -60,6 +59,9 @@ defineOptions({
         ],
     },
 });
+
+const page = usePage();
+const isAdmin = page.props.auth.isAdmin;
 
 const previewImage = ref<string | null>(null);
 const editPreviewImage = ref<string | null>(null);
@@ -369,24 +371,26 @@ const columns: ColumnDef<ExpenseType>[] = [
                 <!-- Header Title & Button -->
                 <div class="flex flex-row items-center justify-between">
                     <div>
-                        <h2 class="text-[2.488rem] font-bold text-gray-800">
+                        <h2
+                            class="text-xl font-bold text-gray-800 lg:text-[2.488rem]"
+                        >
                             Daftar Pengeluaran
                         </h2>
-                        <p class="text-[1rem] text-gray-500">
+                        <p class="text-sm text-gray-500 lg:text-[1rem]">
                             Kelola dan pantau pengeluaran operasional outlet
                             cuci sepatu.
                         </p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-[1.5fr_0.5fr]">
-                    <div class="flex gap-1">
+                <div class="flex flex-col gap-4 lg:flex-row lg:justify-between">
+                    <div class="flex flex-col gap-1 lg:flex-row">
                         <!-- Filter Cabang / Outlet -->
-                        <div class="flex w-fit items-center gap-1">
+                        <div class="flex w-full items-center gap-1 lg:w-fit">
                             <Select v-model="selectedOutlet">
                                 <SelectTrigger
                                     id="outlet_id"
-                                    class="w-48 rounded-lg border-slate-200"
+                                    class="w-full rounded-lg border-slate-200 lg:w-48"
                                 >
                                     <SelectValue placeholder="Semua Cabang" />
                                 </SelectTrigger>
@@ -406,11 +410,11 @@ const columns: ColumnDef<ExpenseType>[] = [
                         </div>
 
                         <!-- Filter Kategori Pengeluaran -->
-                        <div class="flex w-fit items-center gap-1">
+                        <div class="flex w-full items-center gap-1 lg:w-fit">
                             <Select v-model="selectedCategory">
                                 <SelectTrigger
                                     id="expense_category_id"
-                                    class="w-48 rounded-lg border-slate-200"
+                                    class="w-full rounded-lg border-slate-200 lg:w-48"
                                 >
                                     <SelectValue placeholder="Semua Kategori" />
                                 </SelectTrigger>
@@ -441,19 +445,20 @@ const columns: ColumnDef<ExpenseType>[] = [
                                     { replace: true, preserveState: false },
                                 )
                             "
-                            ><FunnelX
-                        /></Button>
+                            ><FunnelX />
+                            <span class="lg:hidden">Hapus Sortir</span>
+                        </Button>
                     </div>
 
-                    <div class="ms-auto flex gap-1">
+                    <div class="flex gap-1 lg:ms-auto">
                         <Button
                             @click="isExportDialogOpen = true"
-                            class="bg-green-600 text-white"
+                            class="w-full bg-green-600 text-white lg:w-fit"
                         >
                             Ekspor
                             <span><FileUp /></span>
                         </Button>
-                        <Button @click="isModalOpen = true">
+                        <Button v-if="isAdmin" @click="isModalOpen = true">
                             Tambah Pengeluaran
                         </Button>
                     </div>

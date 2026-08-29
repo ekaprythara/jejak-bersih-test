@@ -109,6 +109,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware(['auth'])->group(function () {
+        // Route for editing payment status
+        Route::patch('/transactions/{transaction}/payment', [TransactionController::class, 'updatePayment'])
+            ->name('transactions.update-payment');
+
         // 1. Route untuk mengedit info dasar sepatu (Brand, Warna, Size, Kondisi)
         Route::patch('/transactions/{transaction}/shoe-detail', [TransactionController::class, 'updateShoeDetail'])
             ->name('transactions.update-shoe-detail');

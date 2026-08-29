@@ -1,3 +1,5 @@
+import type { RoleType } from './data-types';
+
 export type User = {
     id: number;
     name: string;
@@ -7,10 +9,13 @@ export type User = {
     two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
+    role: RoleType;
     [key: string]: unknown;
 };
 
 export type Auth = {
+    isOwner: boolean;
+    isAdmin: boolean;
     user: User;
 };
 
